@@ -1,0 +1,391 @@
+---
+globs: "**/routers/*.py,**/main.py"
+description: "RESTful API design standards and router patterns"
+---
+
+# REST API Standards
+
+## Core REST Principles
+
+### Resource-Based Design
+
+- URLs represent **resources** (nouns), not actions (verbs)
+- Use **plural nouns** for collections
+- Use HTTP methods to indicate actions on resources
+- Maintain consistent URL patterns across the API
+
+### HTTP Methods and Their Purposes
+
+```python
+# Collection operations (plural resource)
+GET    /todos          # List all todos
+POST   /todos          # Create a new todo
+
+# Individual resource operations
+GET    /todos/{id}     # Get specific todo
+PUT    /todos/{id}     # Update entire todo (replace)
+PATCH  /todos/{id}     # Partial update todo (modify)
+DELETE /todos/{id}     # Delete todo
+```
+
+## URL Structure Standards
+
+### ✅ Good RESTful URLs
+
+```python
+# Resource collections (plural nouns)
+GET    /users          # Get all users
+POST   /users          # Create new user
+GET    /todos          # Get all todos
+POST   /todos          # Create new todo
+
+# Individual resources
+GET    /users/{id}     # Get user by ID
+PUT    /users/{id}     # Update user
+DELETE /users/{id}     # Delete user
+
+# Nested resources (relationships)
+GET    /users/{id}/todos     # Get todos for specific user
+POST   /users/{id}/todos     # Create todo for specific user
+
+# Special endpoints (use descriptive nouns)
+POST   /auth/login           # Authentication action
+POST   /auth/register        # User registration
+GET    /users/me             # Current user profile
+PUT    /users/me/password    # Change current user's password
+```
+
+### ❌ Avoid Non-RESTful URLs
+
+```python
+# Don't use verbs in URLs
+POST   /createUser      # Bad - use POST /users
+GET    /getUser/{id}    # Bad - use GET /users/{id}
+POST   /loginUser       # Bad - use POST /auth/login
+DELETE /deleteTodo/{id} # Bad - use DELETE /todos/{id}
+
+# Don't use actions as endpoints
+POST   /users/create    # Bad - use POST /users
+GET    /todos/list      # Bad - use GET /todos
+PUT    /todos/update/{id} # Bad - use PUT /todos/{id}
+```
+
+## HTTP Status Codes
+
+### Success Responses
+
+```python
+# GET - Resource retrieval
+@router.get("/todos/{id}", status_code=200)  # OK - resource found
+@router.get("/todos", status_code=200)       # OK - list returned
+
+# POST - Resource creation
+@router.post("/todos", status_code=201)      # Created - new resource
+@router.post("/auth/login", status_code=200) # OK - successful action
+
+# PUT - Resource update/replacement
+@router.put("/todos/{id}", status_code=200)  # OK - resource updated
+
+# PATCH - Partial update
+@router.patch("/todos/{id}", status_code=200) # OK - resource modified
+
+# DELETE - Resource removal
+@router.delete("/todos/{id}", status_code=204) # No Content - deleted
+```
+
+### Error Responses
+
+```python
+# Client errors (4xx)
+400  # Bad Request - malformed request
+401  # Unauthorized - authentication required
+403  # Forbidden - insufficient permissions
+404  # Not Found - resource doesn't exist
+422  # Unprocessable Entity - validation failed
+
+# Server errors (5xx)
+500  # Internal Server Error - server fault
+```
+
+## Proper REST Implementation
+
+### Resource Collections
+
+```python
+# TodoApp - RESTful todo management
+router = APIRouter(prefix="/todos", tags=["todos"])
+
+@router.get("/", status_code=200)
+async def get_todos() -> List[TodoResponse]:
+    """Get all todos for authenticated user."""
+    pass
+
+@router.post("/", status_code=201)
+async def create_todo(todo: TodoRequest) -> TodoResponse:
+    """Create a new todo."""
+    pass
+
+@router.get("/{todo_id}", status_code=200)
+async def get_todo(todo_id: ValidId) -> TodoResponse:
+    """Get specific todo by ID."""
+    pass
+
+@router.put("/{todo_id}", status_code=200)
+async def update_todo(todo_id: ValidId, todo: TodoRequest) -> TodoResponse:
+    """Update entire todo (replace)."""
+    pass
+
+@router.delete("/{todo_id}", status_code=204)
+async def delete_todo(todo_id: ValidId):
+    """Delete todo."""
+    pass
+```
+
+### Authentication Resources
+
+```python
+# Authentication as a resource concept
+router = APIRouter(prefix="/auth", tags=["authentication"])
+
+@router.post("/register", status_code=201)
+async def register_user(user_data: CreateUserRequest):
+    """Create new user account."""
+    pass
+
+@router.post("/login", status_code=200)
+async def login_user(credentials: OAuth2PasswordRequestForm) -> Token:
+    """Create authentication session."""
+    pass
+
+@router.post("/logout", status_code=204)
+async def logout_user():
+    """Destroy authentication session."""
+    pass
+```
+
+### User Profile Resources
+
+```python
+# User management
+router = APIRouter(prefix="/users", tags=["users"])
+
+@router.get("/me", status_code=200)
+async def get_current_user() -> UserResponse:
+    """Get current user profile."""
+    pass
+
+@router.put("/me", status_code=200)
+async def update_current_user(user_data: UserUpdateRequest) -> UserResponse:
+    """Update current user profile."""
+    pass
+
+@router.put("/me/password", status_code=204)
+async def change_password(password_data: PasswordChangeRequest):
+    """Update current user's password."""
+    pass
+```
+
+### Admin Resources
+
+```python
+# Administrative operations
+router = APIRouter(prefix="/admin", tags=["administration"])
+
+@router.get("/todos", status_code=200)
+async def get_all_todos() -> List[TodoResponse]:
+    """Get all todos across all users (admin only)."""
+    pass
+
+@router.delete("/todos/{todo_id}", status_code=204)
+async def delete_any_todo(todo_id: ValidId):
+    """Delete any todo regardless of owner (admin only)."""
+    pass
+
+@router.get("/users", status_code=200)
+async def get_all_users() -> List[UserResponse]:
+    """Get all users (admin only)."""
+    pass
+```
+
+## Response Structure Standards
+
+### Successful Responses
+
+```python
+# Single resource
+{
+    "id": 1,
+    "title": "Learn FastAPI",
+    "description": "Complete the tutorial",
+    "priority": 3,
+    "complete": false,
+    "owner_id": 123
+}
+
+# Resource collection
+[
+    {"id": 1, "title": "Task 1", ...},
+    {"id": 2, "title": "Task 2", ...}
+]
+
+# Created resource (201) - return the created resource with ID
+{
+    "id": 5,  # Newly assigned ID
+    "title": "New Task",
+    "description": "Task description",
+    "priority": 3,
+    "complete": false,
+    "owner_id": 123
+}
+```
+
+### Error Responses
+
+```python
+# Consistent error structure
+{
+    "message": "Todo not found",
+    "status_code": 404,
+    "timestamp": "2024-01-15T10:30:00Z"
+}
+
+# Validation errors
+{
+    "message": "Validation error",
+    "status_code": 422,
+    "details": [
+        {
+            "field": "title",
+            "message": "Title must be at least 3 characters"
+        }
+    ]
+}
+```
+
+## REST vs RPC Comparison
+
+### ✅ RESTful Approach
+
+```python
+# Resource-oriented thinking
+GET    /todos/{id}        # Get todo resource
+PUT    /todos/{id}        # Update todo resource
+DELETE /todos/{id}        # Remove todo resource
+POST   /todos             # Create todo resource
+
+# Authentication as resource management
+POST   /auth/login        # Create session
+DELETE /auth/logout       # Destroy session
+```
+
+### ❌ RPC-Style (Avoid)
+
+```python
+# Action-oriented thinking (not REST)
+POST   /getTodo           # Should be GET /todos/{id}
+POST   /updateTodo        # Should be PUT /todos/{id}
+POST   /deleteTodo        # Should be DELETE /todos/{id}
+POST   /createTodo        # Should be POST /todos
+
+# Action-based authentication
+POST   /doLogin           # Should be POST /auth/login
+POST   /performLogout     # Should be DELETE /auth/logout
+```
+
+## Content Type Standards
+
+### Request/Response Headers
+
+```python
+# Always use JSON for API data
+Content-Type: application/json
+Accept: application/json
+
+# Form data for OAuth2 login (exception)
+Content-Type: application/x-www-form-urlencoded  # OAuth2PasswordRequestForm
+```
+
+## Idempotency
+
+### Idempotent Operations
+
+```python
+# These operations should have same result when repeated
+GET    /todos/{id}     # Always returns same resource
+PUT    /todos/{id}     # Same update produces same result
+DELETE /todos/{id}     # Deleting deleted resource = same state
+
+# Non-idempotent operations
+POST   /todos          # Creates new resource each time (different IDs)
+```
+
+## Router Implementation Patterns
+
+### Clean Router Structure
+
+```python
+# routers/todos.py - Domain-focused router
+router = APIRouter(prefix="/todos", tags=["todos"])
+
+user_dependency = Annotated[dict, Depends(get_current_user)]
+
+@router.get(
+    "/",
+    response_model=List[TodoResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Get user todos",
+    description="Retrieve all todos for the authenticated user."
+)
+async def get_todos(user: user_dependency, db: db_dependency):
+    """Get all todos for the current user."""
+    if user is None:
+        raise NotAuthorized()
+    return db.query(Todos).filter(Todos.owner_id == user.get("id")).all()
+```
+
+### Application Setup
+
+```python
+# main.py - Clean application bootstrap
+from fastapi import FastAPI
+from dotenv import load_dotenv
+
+from config import setup_exception_handlers
+from routers import auth, todos, users, admin
+
+load_dotenv()  # Load environment once at startup
+
+app = FastAPI()
+
+# Setup global exception handling
+setup_exception_handlers(app)
+
+# Include domain-based routers
+app.include_router(auth.router)
+app.include_router(todos.router)
+app.include_router(users.router)
+app.include_router(admin.router)
+```
+
+### Dependency Patterns
+
+```python
+# Reusable dependencies with proper typing
+from typing import Annotated
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+user_dependency = Annotated[dict, Depends(get_current_user)]
+db_dependency = Annotated[Session, Depends(get_db)]
+
+# Usage in endpoints
+async def create_todo(
+    user: user_dependency,
+    db: db_dependency,
+    todo_request: TodoRequest
+) -> TodoResponse:
+    """Create new todo with proper dependency injection."""
+```
+
+This ensures your API follows true REST principles and provides predictable, intuitive interfaces for clients.

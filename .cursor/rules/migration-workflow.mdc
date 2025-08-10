@@ -1,0 +1,269 @@
+---
+description: "Database migration workflow and best practices"
+---
+
+# Database Migration Workflow
+
+## Migration Commands Reference
+
+### Basic Commands
+
+```bash
+# Check current migration status
+python migrate.py current
+
+# Show migration history
+python migrate.py history --verbose
+
+# Generate new migration
+python migrate.py revision --autogenerate -m "Description"
+
+# Apply migrations
+python migrate.py upgrade head
+
+# Rollback migrations
+python migrate.py downgrade <revision_id>
+python migrate.py downgrade -1  # Back one step
+python migrate.py downgrade base  # Back to empty DB
+```
+
+### Migration Wrapper Script
+
+```python
+# migrate.py - Simplified Alembic commands
+import subprocess
+import sys
+from pathlib import Path
+
+def main():
+    config_path = Path(__file__).parent / "config" / "alembic.ini"
+    cmd = ["alembic", "-c", str(config_path)] + sys.argv[1:]
+    subprocess.run(cmd, check=True)
+
+if __name__ == "__main__":
+    main()
+```
+
+## Migration Best Practices
+
+### Separate Migrations Strategy
+
+```python
+# Migration 1: Create users table
+"""Create users table
+
+Revision ID: 9927cfa5c027
+Revises:
+Create Date: 2025-08-10 02:41:13.735171
+"""
+
+def upgrade() -> None:
+    op.create_table('users',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('email', sa.String(), nullable=True),
+        sa.Column('username', sa.String(), nullable=True),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('email'),
+        sa.UniqueConstraint('username')
+    )
+
+def downgrade() -> None:
+    op.drop_table('users')
+```
+
+```python
+# Migration 2: Create todos table (depends on users)
+"""Create todos table
+
+Revision ID: 68ac3e7a8414
+Revises: 9927cfa5c027
+Create Date: 2025-08-10 02:42:45.985648
+"""
+
+def upgrade() -> None:
+    op.create_table('todos',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('title', sa.String(), nullable=True),
+        sa.Column('owner_id', sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(['owner_id'], ['users.id']),
+        sa.PrimaryKeyConstraint('id')
+    )
+
+def downgrade() -> None:
+    op.drop_table('todos')
+```
+
+### Migration Naming Conventions
+
+- **Descriptive names**: "Create users table", "Add index to email"
+- **Clear dependencies**: Users before Todos (foreign key dependency)
+- **One concern per migration**: Easier to track and rollback
+
+## Environment Setup
+
+### Database Creation
+
+```bash
+# PostgreSQL database setup
+createdb todosapp_development
+createdb todosapp_test
+createdb todosapp_production
+
+# Clean slate for development
+dropdb todosapp_development && createdb todosapp_development
+```
+
+### Migration Environment Configuration
+
+```python
+# db/env.py - Alembic environment setup
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import application components
+from config.settings import settings
+import models  # Auto-import all models
+
+# Configure Alembic
+config.set_main_option("sqlalchemy.url", settings.database_url)
+target_metadata = settings.base.metadata
+
+def run_migrations_online():
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+```
+
+### Project Structure for Migrations
+
+```
+project/
+├── config/
+│   ├── alembic.ini        # Moved from root for organization
+│   ├── database.py        # Database connection logic
+│   └── settings.py        # Centralized settings
+├── db/                    # Renamed from alembic/
+│   ├── env.py            # Environment configuration
+│   ├── script.py.mako    # Migration template
+│   └── versions/         # Migration files
+│       ├── 9927cfa5c027_create_users_table.py
+│       └── 68ac3e7a8414_create_todos_table.py
+├── models/
+│   ├── __init__.py       # Export all models
+│   ├── user.py
+│   └── todo.py
+└── migrate.py            # Wrapper script
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### "Target database is not up to date"
+
+```bash
+# Solution: Apply existing migrations first
+python migrate.py upgrade head
+python migrate.py revision --autogenerate -m "New changes"
+```
+
+#### Empty Migrations Generated
+
+```bash
+# Cause: Tables already exist from previous runs
+# Solution: Clean slate approach
+dropdb todosapp_development
+createdb todosapp_development
+# Delete migration files in db/versions/
+python migrate.py revision --autogenerate -m "Fresh migration"
+```
+
+#### Import Errors in env.py
+
+```python
+# Solution: Proper path management
+sys.path.insert(0, str(Path(__file__).parent.parent))
+import models  # Import package, not individual models
+```
+
+### Clean Slate Migration Process
+
+```bash
+# 1. Drop and recreate database
+dropdb todosapp_development
+createdb todosapp_development
+
+# 2. Remove old migration files
+rm db/versions/*.py
+
+# 3. Generate fresh migrations
+python migrate.py revision --autogenerate -m "Create users table"
+# (temporarily comment out todos model)
+python migrate.py upgrade head
+
+# 4. Generate second migration
+# (uncomment todos model)
+python migrate.py revision --autogenerate -m "Create todos table"
+python migrate.py upgrade head
+```
+
+## Rails vs Alembic Comparison
+
+### Similarities
+
+```ruby
+# Rails migrations
+rails generate migration CreateUsers
+rake db:migrate
+rake db:rollback STEP=1
+
+# Alembic equivalent
+python migrate.py revision --autogenerate -m "Create users"
+python migrate.py upgrade head
+python migrate.py downgrade -1
+```
+
+### Key Differences
+
+- **Auto-generation**: Alembic compares models to current schema
+- **Template system**: Uses Mako templates for consistent migration structure
+- **Metadata binding**: Explicit connection to SQLAlchemy models
+- **Environment awareness**: More explicit database connection handling
+
+### Migration File Structure Comparison
+
+```python
+# Alembic migration structure
+def upgrade() -> None:
+    """Upgrade schema."""
+    # Forward changes
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # Rollback changes
+```
+
+```ruby
+# Rails migration structure
+def up
+  # Forward changes
+end
+
+def down
+  # Rollback changes
+end
+```

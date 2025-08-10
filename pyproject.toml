@@ -1,0 +1,56 @@
+[tool.pylint.MASTER]
+# Add the project root to Python path for imports
+init-hook = '''
+import sys
+import os
+sys.path.insert(0, os.getcwd())
+'''
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+    "C0111",  # missing-docstring (if you want to be selective)
+    "C0411",  # wrong-import-order
+    "R0903",  # too-few-public-methods (common with Pydantic models)
+    "R0801",  # duplicate-code
+    "W0511",  # fixme (TODO comments)
+    "C0301",  # line-too-long (handled by formatter)
+    "C0114",  # missing-module-docstring (if too strict)
+    "C0115",  # missing-class-docstring (if too strict)
+    "C0116",  # missing-function-docstring (if too strict)
+]
+
+[tool.pylint.FORMAT]
+max-line-length = 100
+
+[tool.pylint.BASIC]
+good-names = ["i", "j", "k", "db", "id", "_"]
+docstring-min-length = 10
+
+[tool.pylint.DESIGN]
+max-args = 7
+max-attributes = 10
+
+# Pylint doesn't use known-first-party - moved to isort section below
+
+[tool.isort]
+profile = "black"
+known_third_party = ["fastapi", "pydantic", "sqlalchemy", "starlette", "jose", "passlib"]
+known_first_party = ["config", "models", "routers"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+import_heading_stdlib = "Standard library imports"
+import_heading_thirdparty = "Third-party imports"
+import_heading_firstparty = "Local application imports"
+import_heading_localfolder = "Local folder imports"
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+check_untyped_defs = true

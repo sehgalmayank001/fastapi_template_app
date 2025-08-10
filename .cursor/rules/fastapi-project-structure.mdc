@@ -1,0 +1,285 @@
+---
+alwaysApply: true
+---
+
+# FastAPI Project Structure Guide
+
+## Project Organization
+
+### Main Application Structure
+
+```
+project/
+├── main.py                 # FastAPI application entry point
+├── config/                 # All configuration files
+│   ├── __init__.py        # Centralized exports (settings, db_dependency, etc.)
+│   ├── database.py        # Database connection logic
+│   ├── database.yml       # Environment-specific DB config
+│   ├── settings.py        # Centralized app settings using Pydantic
+│   ├── api_response.py    # JSON response helpers
+│   ├── rescue.py          # Global exception handlers
+│   └── alembic.ini        # Alembic migration config
+├── models/                # Individual model files (SRP)
+│   ├── __init__.py        # Package exports
+│   ├── user.py           # User model
+│   └── todo.py           # Todo model
+├── schemas/               # Domain-organized Pydantic schemas
+│   ├── __init__.py        # Main schema exports
+│   ├── auth/              # Authentication schemas
+│   │   ├── __init__.py
+│   │   ├── create_user_request.py
+│   │   └── token.py
+│   ├── todo/              # Todo schemas
+│   │   ├── __init__.py
+│   │   ├── todo_request.py
+│   │   └── todo_response.py
+│   ├── user/              # User schemas
+│   │   ├── __init__.py
+│   │   ├── user_response.py
+│   │   └── user_verification.py
+│   └── common/            # Shared validation and error schemas
+│       ├── __init__.py
+│       ├── common.py      # ValidId, ERROR_RESPONSES
+│       └── error_response.py
+├── exceptions/            # Custom exception classes
+│   ├── __init__.py        # Exception exports
+│   ├── api_exception.py   # Base exception
+│   ├── record_not_found.py
+│   ├── not_authorized.py
+│   └── record_invalid.py
+├── routers/               # API route modules
+│   ├── __init__.py
+│   ├── auth.py           # Authentication routes
+│   ├── todos.py          # Todo CRUD routes
+│   ├── users.py          # User account routes
+│   └── admin.py          # Admin-only routes
+├── db/                    # Alembic migrations (renamed from alembic/)
+│   ├── env.py            # Alembic environment configuration
+│   └── versions/         # Migration files
+├── migrate.py            # Wrapper for Alembic commands
+├── .env                  # Environment variables
+└── pyproject.toml        # Python project configuration (Pylint, isort)
+```
+
+### Models Organization (SRP Pattern)
+
+- **Pattern**: One model per file, following Single Responsibility Principle
+- **Import pattern**: Models imported through package `__init__.py`
+- **Base access**: `Base = settings.base` for centralized configuration
+
+### Schema Organization (Domain-Driven Design)
+
+- **Domain separation**: Schemas organized by business domain (auth, todo, user, common)
+- **One class per file**: Each Pydantic model in its own file for maintainability
+- **Hierarchical imports**: Domain `__init__.py` exports, main `schemas/__init__.py` re-exports all
+- **Shared components**: Common validation and error responses in `schemas/common/`
+
+### Exception Handling Structure
+
+- **Custom exceptions**: Domain-specific exception classes inheriting from `APIException`
+- **Global handlers**: Centralized exception handling in `config/rescue.py`
+- **Consistent responses**: All errors return standardized JSON format
+
+### Configuration Management
+
+- **Centralized config**: All configuration modules exported from `config/__init__.py`
+- **Consistent imports**: Use `from config import settings, db_dependency` pattern
+- **Environment isolation**: Database config via YAML with Jinja templating
+
+### Database Migrations
+
+- **Migration folder**: `db/` instead of default `alembic/`
+- **Config location**: Moved to `config/alembic.ini` for organization
+- **Wrapper script**: `migrate.py` for simplified Alembic commands
+
+## Configuration Patterns
+
+### Environment Variables
+
+```python
+# main.py - Load once at application startup
+from dotenv import load_dotenv
+load_dotenv()  # Centralized environment loading
+```
+
+### Database Configuration
+
+```yaml
+# database.yml - Rails-style with Jinja templating
+development:
+  database: "{{ DB_NAME | default('app_development') }}"
+  username: "{{ DB_USERNAME | default('') }}"
+  password: "{{ DB_PASSWORD | default('') }}"
+  host: "{{ DB_HOST | default('localhost') }}"
+  port: "{{ DB_PORT | default(5432) }}"
+  # URL takes precedence over individual components
+  url: "{{ DATABASE_URL | default('') }}"
+```
+
+### Centralized Settings
+
+```python
+# settings.py - Pydantic BaseSettings for type safety
+class Settings(BaseSettings):
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        db_config = load_database_config()
+        return get_database_url(db_config)
+
+    @property
+    def database_engine(self):
+        return engine  # From database.py
+
+    @property
+    def base(self):
+        return Base  # Centralized access to declarative base
+```
+
+## Code Quality Standards
+
+### String Literals and Documentation
+
+- **Use double quotes consistently**: `"string"` not `'string'`
+- **Module docstrings**: Every Python file starts with `"""Module description."""`
+- **No suppression comments**: Fix issues instead of using `# pylint: disable`
+
+### Import Organization
+
+```python
+# Standard library imports
+from datetime import datetime
+from typing import Annotated, Optional
+
+# Third-party imports (alphabetical)
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+# First-party imports (alphabetical)
+from config import db_dependency, settings
+from exceptions import NotAuthorized, RecordNotFound
+from schemas import TodoRequest, ValidId, ERROR_RESPONSES
+```
+
+### Project Configuration
+
+```toml
+# pyproject.toml - Centralized tool configuration
+[tool.pylint.MASTER]
+init-hook='import sys; sys.path.append(".")'
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = ["C0111", "R0903", "R0801", "W0511", "C0301"]
+
+[tool.isort]
+profile = "black"
+known_third_party = ["fastapi", "pydantic", "sqlalchemy"]
+known_first_party = ["config", "models", "routers", "schemas", "exceptions"]
+```
+
+## Schema Organization (Domain-Driven Design)
+
+### Domain Structure
+
+```
+schemas/
+├── __init__.py           # Main exports
+├── auth/                 # Authentication domain
+│   ├── __init__.py
+│   ├── create_user_request.py
+│   └── token.py
+├── todo/                 # Todo domain
+│   ├── __init__.py
+│   ├── todo_request.py
+│   └── todo_response.py
+├── user/                 # User domain
+│   ├── __init__.py
+│   ├── user_response.py
+│   └── user_verification.py
+└── common/               # Shared components
+    ├── __init__.py
+    ├── common.py         # ValidId, ERROR_RESPONSES
+    └── error_response.py
+```
+
+### Schema Patterns
+
+```python
+# One class per file - maintainable and scalable
+# schemas/todo/todo_request.py
+class TodoRequest(BaseModel):
+    """Schema for todo creation and updates."""
+    title: str = Field(min_length=3, max_length=200)
+    description: Optional[str] = Field(default=None)
+    priority: int = Field(ge=1, le=5, default=3)
+    complete: bool = Field(default=False)
+
+# schemas/common/common.py - Shared validation
+ValidId = Annotated[int, Path(gt=0, description="ID must be greater than 0")]
+ERROR_RESPONSES = {
+    401: {"model": ErrorResponse, "description": "Authentication failed"},
+    403: {"model": ErrorResponse, "description": "Access forbidden"},
+    404: {"model": ErrorResponse, "description": "Resource not found"},
+    422: {"model": ErrorResponse, "description": "Validation error"},
+}
+```
+
+### Hierarchical Imports
+
+```python
+# schemas/__init__.py - Clean external interface
+from .auth import CreateUserRequest, Token
+from .todo import TodoRequest, TodoResponse
+from .user import UserResponse, UserVerification
+from .common import ValidId, ERROR_RESPONSES, ErrorResponse
+
+# Usage in routers - simple imports
+from schemas import TodoRequest, ValidId, ERROR_RESPONSES
+```
+
+## Exception Handling
+
+### Custom Exception Structure
+
+```
+exceptions/
+├── __init__.py
+├── api_exception.py      # Base exception
+├── record_not_found.py   # 404 errors
+├── not_authorized.py     # 401/403 errors
+└── record_invalid.py     # 422 validation errors
+```
+
+### Exception Implementation
+
+```python
+# exceptions/api_exception.py
+class APIException(Exception):
+    def __init__(self, message: str, status_code: int = 500):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
+
+# exceptions/not_authorized.py
+class NotAuthorized(APIException):
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(message, 401)
+
+# config/rescue.py - Global exception handlers
+def setup_exception_handlers(app: FastAPI):
+    @app.exception_handler(APIException)
+    async def api_exception_handler(request, exc: APIException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "message": exc.message,
+                "status_code": exc.status_code,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+```

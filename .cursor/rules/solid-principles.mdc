@@ -1,0 +1,245 @@
+---
+description: "SOLID principles application in FastAPI projects"
+---
+
+# SOLID Principles in FastAPI
+
+## Single Responsibility Principle (SRP)
+
+### Model Organization
+
+```python
+# ❌ VIOLATION: Single models.py file with all models
+class Users(Base):
+    # user fields
+
+class Todos(Base):
+    # todo fields
+
+class Categories(Base):
+    # category fields
+
+# ✅ CORRECT: One model per file
+# models/user.py
+class Users(Base):
+    # user fields only
+
+# models/todo.py
+class Todos(Base):
+    # todo fields only
+
+# models/category.py
+class Categories(Base):
+    # category fields only
+```
+
+### Configuration Separation
+
+```python
+# config/database.py - Database connection logic only
+engine = create_database_engine()
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+# config/settings.py - Settings management only
+class Settings(BaseSettings):
+    @property
+    def database_engine(self):
+        return engine
+
+# config/database.yml - Environment configuration only
+development:
+  database: "{{ DB_NAME | default('app_development') }}"
+```
+
+## Dependency Inversion Principle
+
+### Settings as Interface Pattern
+
+```python
+# ✅ CORRECT: Depend on abstraction (settings interface)
+# models/user.py
+from config.settings import settings
+Base = settings.base  # Depends on interface
+
+class Users(Base):
+    pass
+
+# ❌ WRONG: Direct dependency on concrete implementation
+# models/user.py
+from config.database import Base  # Direct coupling
+
+class Users(Base):
+    pass
+```
+
+### Interface Implementation
+
+```python
+# settings.py - Acts as interface/facade
+class Settings(BaseSettings):
+    @property
+    def database_engine(self):
+        """Get database engine from database module."""
+        return engine  # Delegates to implementation
+
+    @property
+    def base(self):
+        """Get declarative base from database module."""
+        return Base  # Delegates to implementation
+
+# database.py - Contains actual implementation
+engine = create_database_engine()
+Base = declarative_base()
+```
+
+## Open/Closed Principle
+
+### Exception Hierarchy
+
+```python
+# Base class - closed for modification
+class APIException(Exception):
+    def __init__(self, message: str, status_code: int = 500):
+        self.message = message
+        self.status_code = status_code
+
+# Extensions - open for extension
+class RecordNotFound(APIException):
+    def __init__(self, message: str = "Record not found"):
+        super().__init__(message, 404)
+
+class RecordInvalid(APIException):
+    def __init__(self, message: str = "Invalid data"):
+        super().__init__(message, 422)
+```
+
+## Interface Segregation Principle
+
+### Focused Interfaces
+
+```python
+# ✅ CORRECT: Small, focused interfaces
+class DatabaseInterface:
+    @property
+    def engine(self): pass
+    @property
+    def session_local(self): pass
+
+class ConfigInterface:
+    @property
+    def database_url(self): pass
+    @property
+    def debug(self): pass
+
+# ❌ WRONG: Fat interface
+class MonolithicInterface:
+    def get_database(self): pass
+    def send_email(self): pass
+    def process_payment(self): pass
+    def generate_report(self): pass
+```
+
+## Liskov Substitution Principle
+
+### Model Inheritance
+
+```python
+# Base model
+class BaseModel(Base):
+    __abstract__ = True
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Substitutable derived models
+class Users(BaseModel):
+    __tablename__ = "users"
+    email = Column(String, unique=True)
+
+class Todos(BaseModel):
+    __tablename__ = "todos"
+    title = Column(String)
+
+# Both can be used wherever BaseModel is expected
+```
+
+## Best Practices
+
+### Import Management
+
+```python
+# ✅ CORRECT: Access through interface
+from config.settings import settings
+Base = settings.base
+engine = settings.database_engine
+
+# ❌ WRONG: Direct imports create tight coupling
+from config.database import Base, engine
+```
+
+### Configuration Management
+
+```python
+# ✅ CORRECT: Single source of truth
+settings = Settings()  # One instance
+database_url = settings.database_url
+engine = settings.database_engine
+
+# ❌ WRONG: Multiple configuration sources
+from config.database import engine
+from config.settings import database_url
+```
+
+## Anti-Patterns to Avoid
+
+### God Objects
+
+```python
+# ❌ WRONG: Everything in one class/file
+class ApplicationManager:
+    def handle_database(self): pass
+    def send_emails(self): pass
+    def process_payments(self): pass
+    def generate_reports(self): pass
+    def manage_users(self): pass
+
+# ✅ CORRECT: Separate responsibilities
+class DatabaseManager: pass
+class EmailService: pass
+class PaymentProcessor: pass
+class ReportGenerator: pass
+class UserService: pass
+```
+
+### Tight Coupling
+
+```python
+# ❌ WRONG: Direct imports everywhere
+from config.database import engine, Base
+from models.user import Users
+from models.todo import Todos
+
+# ✅ CORRECT: Centralized access
+from config.settings import settings
+engine = settings.database_engine
+Base = settings.base
+```
+
+### Mixed Concerns
+
+```python
+# ❌ WRONG: Database logic in API route
+@app.get("/users/{user_id}")
+async def get_user(user_id: int):
+    engine = create_engine(DATABASE_URL)
+    session = sessionmaker(bind=engine)()
+    user = session.query(Users).filter(Users.id == user_id).first()
+    session.close()
+    return user
+
+# ✅ CORRECT: Separated concerns
+@app.get("/users/{user_id}")
+async def get_user(user_id: int):
+    user_service = UserService()
+    return user_service.get_by_id(user_id)
+```
