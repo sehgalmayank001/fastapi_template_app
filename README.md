@@ -11,9 +11,10 @@ A comprehensive FastAPI application template showcasing modern Python web develo
 - **Comprehensive Documentation**: Auto-generated OpenAPI docs with detailed responses
 - **Exception Handling**: Centralized error handling with custom exceptions
 - **Configuration Management**: Environment-based config with YAML and Jinja templating
+- **Request Logging**: Comprehensive request/response logging with parameter filtering
 - **Code Quality**: Pylint, isort, and comprehensive linting setup
 - **Caching**: Request-level user caching for optimal performance
-- **Middleware**: Custom authentication middleware for seamless user injection
+- **Middleware**: Custom authentication and logging middleware
 
 ## 📁 Project Structure
 
@@ -28,6 +29,9 @@ TodoApp/
 │   ├── db_dependencies.py # Database dependency injection
 │   ├── auth_middleware.py # Authentication middleware
 │   ├── auth_helpers.py    # Authentication decorators and helpers
+│   ├── logging_middleware.py # Request logging middleware
+│   ├── logging_helpers.py # Logging utilities and parameter filtering
+│   ├── logging_config.py  # Logging configuration and filter parameters
 │   ├── api_response.py    # JSON response utilities
 │   ├── rescue.py          # Global exception handlers
 │   └── alembic.ini        # Alembic migration configuration
@@ -110,6 +114,9 @@ SECRET_KEY=your-secret-key-here
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=20
 
+# Logging (optional - defaults provided)
+FILTER_PARAMS=password,hashed_password,token,access_token,secret_key,api_key
+
 # Application
 APP_ENV=development
 DEBUG=true
@@ -190,6 +197,70 @@ async def get_all_users(db: db_dependency):
 user = current_user()  # Returns full User model object
 print(user.id, user.username, user.email)  # Direct attribute access
 ```
+
+### Request Logging System
+
+**Comprehensive Request/Response Logging** with parameter filtering:
+
+```python
+# Automatically logs all requests/responses with sensitive data filtered
+app.add_middleware(RequestLoggingMiddleware)
+```
+
+**Simple Environment-Based Logging**:
+
+```python
+# config/logging_config.py - Simple and clean
+class LoggingConfig:
+    @property
+    def log_level(self) -> str:
+        """LOG_LEVEL env var or APP_ENV default."""
+        return os.getenv("LOG_LEVEL", self._default_log_level()).upper()
+
+    @property
+    def filter_params(self) -> List[str]:
+        """Rails-style filter parameters (same across all environments)."""
+        return [
+            "passw", "secret", "token", "_key", "crypt", "salt", "certificate",
+            "auth", "session", "cookie", "ssn", "phone_number"
+        ]
+```
+
+**Environment Variables:**
+
+```bash
+# Set log level (default: INFO in prod, DEBUG in dev)
+LOG_LEVEL=INFO
+```
+
+**Example Log Output**:
+
+```
+INCOMING REQUEST:
+{
+  "method": "POST",
+  "url": "https://api.example.com/auth/login",
+  "headers": {
+    "authorization": "[FILTERED]",
+    "content-type": "application/json"
+  },
+  "body": {
+    "username": "john_doe",
+    "password": "[FILTERED]"
+  },
+  "process_time_ms": 45.67
+}
+```
+
+**Features**:
+
+- **Simple configuration** - just LOG_LEVEL environment variable, filter params hardcoded like Rails
+- **Rails-style pattern matching** - "passw" matches password, user_password, etc.
+- **Sensible defaults** - essential filter patterns, INFO in prod, DEBUG in dev
+- **Automatic filtering** of sensitive parameters in request/response bodies, headers, and URLs
+- **Performance timing** - includes request processing time in all responses
+- **Large data truncation** - prevents log bloat from large payloads
+- **Multiple content types** - handles JSON, form data, and file uploads appropriately
 
 ### Schema Organization
 

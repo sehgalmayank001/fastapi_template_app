@@ -2,13 +2,16 @@
 
 from fastapi import FastAPI
 
-from config import setup_exception_handlers, AuthMiddleware
+from config import setup_exception_handlers, AuthMiddleware, RequestLoggingMiddleware
 from routers import auth, todos, admin, users
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = FastAPI()
+
+# Add request logging middleware (logs all requests/responses with filtering)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Add authentication middleware (automatically injects user)
 app.add_middleware(AuthMiddleware)
