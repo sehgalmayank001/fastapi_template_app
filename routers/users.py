@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from starlette import status
 
 from config import db_dependency, CurrentUser
+from config.structlog_config import get_logger
 from exceptions import NotAuthorized
 from models import User
 from schemas import UserVerification, UserResponse, ERROR_RESPONSES
@@ -23,7 +24,30 @@ bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 )
 async def get_current_user_info(db: db_dependency, user: CurrentUser):
     """Get current user information."""
-    return db.query(User).filter(User.id == user.id).first()
+    # Get a structured logger for the "users" domain
+    # This creates logs tagged with [users] to separate business logic from middleware logs
+    # Example: "User profile requested [users]" vs "Request completed [request]"
+    logger = get_logger("users")
+    logger.info(
+        "User profile requested",
+        user_id=user.id,
+        username=user.username,
+        role=user.role,
+        action="get_profile",
+        endpoint="/users/me",
+    )
+
+    user_data = db.query(User).filter(User.id == user.id).first()
+
+    # Log successful retrieval
+    logger.debug(
+        "User profile retrieved successfully",
+        user_id=user.id,
+        has_data=user_data is not None,
+        fields_requested=["id", "username", "email", "role"],
+    )
+
+    return user_data
 
 
 @router.put(
