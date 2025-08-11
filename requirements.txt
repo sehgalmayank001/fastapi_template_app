@@ -16,3 +16,4 @@ python-dotenv
 PyYAML
 pydantic-settings
 alembic
+structlog==25.4.0

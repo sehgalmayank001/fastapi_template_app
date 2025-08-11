@@ -5,7 +5,6 @@ from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings
 
 from .database import load_database_config, get_database_url, engine, SessionLocal, Base
-from .logging_config import logging_config
 
 
 class Settings(BaseSettings):
@@ -38,12 +37,6 @@ class Settings(BaseSettings):
     record_not_found_message: str = Field(
         default="Todo not found.", alias="RECORD_NOT_FOUND_MESSAGE"
     )
-
-    @computed_field
-    @property
-    def filter_params(self) -> List[str]:
-        """Get filter parameters from logging config."""
-        return logging_config.filter_params
 
     @computed_field
     @property
