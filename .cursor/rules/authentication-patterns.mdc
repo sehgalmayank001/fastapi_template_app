@@ -1,0 +1,123 @@
+---
+description: "FastAPI authentication patterns using dependency injection and OAuth2"
+globs: "routers/*.py,config/auth_helpers.py,main.py"
+---
+
+# FastAPI Authentication Patterns
+
+## Core Authentication Architecture
+
+This project uses **FastAPI dependency injection** for authentication, not middleware. All authentication logic is centralized in [config/auth_helpers.py](mdc:config/auth_helpers.py).
+
+### OAuth2 Password Bearer Setup
+
+```python
+# OAuth2 security scheme for Swagger UI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+```
+
+- **tokenUrl**: Points to `/auth/login` endpoint for Swagger UI integration
+- **Automatic Swagger UI**: Users can login with username/password directly in docs
+
+### Authentication Dependencies
+
+Use these pre-defined type aliases in route handlers:
+
+```python
+from config import CurrentUser, AdminUser
+
+# Regular authenticated user
+async def protected_route(user: CurrentUser):
+    # user is automatically injected and validated
+    pass
+
+# Admin-only route
+async def admin_route(admin: AdminUser):
+    # admin user is automatically injected and role-checked
+    pass
+```
+
+### JWT Token Processing
+
+- **No middleware**: JWT tokens are decoded directly in dependency functions
+- **Single decode**: Each token is only decoded once per request
+- **Database lookup**: User is fetched from database after JWT validation
+- **Error handling**: Proper HTTP exceptions with chained error context
+
+### Route Handler Patterns
+
+#### ✅ Correct Pattern
+
+```python
+@router.get("/protected")
+async def get_data(db: db_dependency, user: CurrentUser):
+    return db.query(Model).filter(Model.owner_id == user.id).all()
+
+@router.delete("/admin-only/{item_id}")
+async def delete_item(db: db_dependency, item_id: ValidId, admin: AdminUser):
+    # Admin role automatically validated
+    pass
+```
+
+#### ❌ Avoid These Patterns
+
+```python
+# DON'T: Pass Request objects for authentication
+async def bad_route(request: Request, db: db_dependency):
+    pass
+
+# DON'T: Use decorators for authentication
+@some_auth_decorator
+async def bad_route(db: db_dependency):
+    pass
+
+# DON'T: Manual JWT handling in routes
+async def bad_route(authorization: str = Header()):
+    # Manual token parsing - use dependencies instead
+    pass
+```
+
+### Login Endpoint Requirements
+
+Login endpoints must use `OAuth2PasswordRequestForm` for Swagger compatibility:
+
+```python
+@router.post("/login", response_model=Token)
+async def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: db_dependency
+):
+    user = authenticate_user(form_data.username, form_data.password, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token(user.username, user.id, user.role, expires_delta)
+    return {"access_token": token, "token_type": "bearer"}
+```
+
+### Error Handling
+
+All authentication errors should use proper HTTP exceptions:
+
+```python
+# 401 for authentication failures
+raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+# 403 for authorization failures (valid user, insufficient permissions)
+raise HTTPException(status_code=403, detail="Admin access required")
+```
+
+### Key Benefits
+
+1. **Performance**: No duplicate JWT parsing
+2. **Simplicity**: No middleware state management
+3. **Type Safety**: Full type hints for authenticated users
+4. **Swagger Integration**: Automatic OAuth2 flow in docs
+5. **Testability**: Easy to mock dependencies in tests
+
+### Migration Notes
+
+- **Removed**: `AuthMiddleware` class and all middleware-based authentication
+- **Removed**: Context variables and request state management
+- **Added**: Direct JWT processing in dependency functions
+- **Maintained**: All existing route functionality with cleaner code

@@ -5,21 +5,20 @@ A comprehensive FastAPI application template showcasing modern Python web develo
 ## 🚀 Features
 
 - **Clean Architecture**: Domain-driven design with organized schemas, models, and routers
-- **Authentication & Authorization**: JWT-based auth with middleware and decorators
+- **OAuth2 Authentication**: JWT-based auth with FastAPI dependency injection and Swagger UI integration
 - **Database Integration**: PostgreSQL with SQLAlchemy ORM and Alembic migrations
 - **RESTful API Design**: Resource-based URLs with proper HTTP methods and status codes
-- **Comprehensive Documentation**: Auto-generated OpenAPI docs with detailed responses
+- **Comprehensive Documentation**: Auto-generated OpenAPI docs with OAuth2 password flow
 - **Exception Handling**: Centralized error handling with custom exceptions
 - **Configuration Management**: Environment-based config with YAML and Jinja templating
 - **Request Logging**: Comprehensive request/response logging with parameter filtering
 - **Code Quality**: Pylint, isort, and comprehensive linting setup
-- **Caching**: Request-level user caching for optimal performance
-- **Middleware**: Custom authentication and logging middleware
+- **Performance Optimized**: Single JWT decode per request, no redundant middleware
 
 ## 📁 Project Structure
 
 ```
-TodoApp/
+fastapi_template_app/
 ├── main.py                 # FastAPI application entry point
 ├── config/                 # Configuration and dependencies
 │   ├── __init__.py        # Centralized exports
@@ -27,8 +26,7 @@ TodoApp/
 │   ├── database.py        # Database connection and session management
 │   ├── database.yml       # Environment-specific DB configuration
 │   ├── db_dependencies.py # Database dependency injection
-│   ├── auth_middleware.py # Authentication middleware
-│   ├── auth_helpers.py    # Authentication decorators and helpers
+│   ├── auth_helpers.py    # OAuth2 authentication dependencies
 │   ├── logging_middleware.py # Request logging middleware
 │   ├── logging_helpers.py # Logging utilities and parameter filtering
 │   ├── logging_config.py  # Logging configuration and filter parameters
@@ -86,7 +84,7 @@ TodoApp/
 
 ```bash
 git clone <repository-url>
-cd TodoApp
+cd fastapi_template_app
 pip install -r requirements.txt
 ```
 
@@ -114,9 +112,6 @@ SECRET_KEY=your-secret-key-here
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=20
 
-# Logging (optional - defaults provided)
-FILTER_PARAMS=password,hashed_password,token,access_token,secret_key,api_key
-
 # Application
 APP_ENV=development
 DEBUG=true
@@ -140,7 +135,71 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Visit `http://localhost:8000/docs` for interactive API documentation.
 
-## 🔧 Key Patterns and Architecture
+## 🔐 Authentication System
+
+### OAuth2 Password Bearer with Swagger UI
+
+The application uses **FastAPI dependency injection** for authentication with full Swagger UI integration:
+
+```python
+# OAuth2 security scheme for Swagger UI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+```
+
+**Features:**
+
+- **Swagger UI Integration**: Users can login with username/password directly in docs
+- **JWT Token Processing**: Single decode per request for optimal performance
+- **Type-Safe Dependencies**: Full type hints for authenticated users
+- **No Middleware**: Clean, dependency-based approach
+
+### Authentication Dependencies
+
+Use these pre-defined type aliases in route handlers:
+
+```python
+from config import CurrentUser, AdminUser
+
+# Regular authenticated user
+@router.get("/protected")
+async def protected_route(user: CurrentUser):
+    # user is automatically injected and validated
+    return {"user_id": user.id, "username": user.username}
+
+# Admin-only route
+@router.delete("/admin-only/{item_id}")
+async def admin_route(item_id: int, admin: AdminUser):
+    # admin user is automatically injected and role-checked
+    pass
+```
+
+### Login Endpoint
+
+Login endpoints use `OAuth2PasswordRequestForm` for Swagger compatibility:
+
+```python
+@router.post("/login", response_model=Token)
+async def login(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: db_dependency
+):
+    user = authenticate_user(form_data.username, form_data.password, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token(user.username, user.id, user.role, expires_delta)
+    return {"access_token": token, "token_type": "bearer"}
+```
+
+### Authentication Flow
+
+1. **User Login**: POST to `/auth/login` with username/password
+2. **Token Generation**: Server returns JWT token
+3. **Swagger UI**: Users can authenticate directly in docs interface
+4. **Protected Routes**: Dependencies automatically validate JWT and fetch user
+5. **Role-Based Access**: Admin routes check user role automatically
+
+## 🛠️ Key Patterns and Architecture
 
 ### Configuration Management
 
@@ -164,38 +223,6 @@ development:
   database: "{{ DB_NAME | default('app_development') }}"
   username: "{{ DB_USERNAME | default('') }}"
   url: "{{ DATABASE_URL | default('') }}"
-```
-
-### Authentication System
-
-**Middleware-based Authentication**:
-
-```python
-# Automatic user injection via middleware
-app.add_middleware(AuthMiddleware)
-```
-
-**Decorator-based Authorization**:
-
-```python
-@router.get("/todos")
-@authenticate_user  # Ensures user is logged in
-async def get_todos(db: db_dependency):
-    user = current_user()  # Get current user (cached)
-    return db.query(Todos).filter(Todos.owner_id == user.id).all()
-
-@router.get("/admin/users")
-@admin_required  # Ensures user has admin role
-async def get_all_users(db: db_dependency):
-    return db.query(Users).all()
-```
-
-**Current User Helper** with caching:
-
-```python
-# Access authenticated user anywhere
-user = current_user()  # Returns full User model object
-print(user.id, user.username, user.email)  # Direct attribute access
 ```
 
 ### Request Logging System
@@ -226,41 +253,28 @@ class LoggingConfig:
         ]
 ```
 
-**Environment Variables:**
-
-```bash
-# Set log level (default: INFO in prod, DEBUG in dev)
-LOG_LEVEL=INFO
-```
-
 **Example Log Output**:
 
-```
-INCOMING REQUEST:
+```json
 {
   "method": "POST",
   "url": "https://api.example.com/auth/login",
   "headers": {
     "authorization": "[FILTERED]",
-    "content-type": "application/json"
+    "content-type": "application/x-www-form-urlencoded"
   },
-  "body": {
-    "username": "john_doe",
-    "password": "[FILTERED]"
-  },
+  "body": "<FORM_DATA_SKIPPED_FOR_COMPATIBILITY>",
   "process_time_ms": 45.67
 }
 ```
 
 **Features**:
 
-- **Simple configuration** - just LOG_LEVEL environment variable, filter params hardcoded like Rails
 - **Rails-style pattern matching** - "passw" matches password, user_password, etc.
 - **Sensible defaults** - essential filter patterns, INFO in prod, DEBUG in dev
-- **Automatic filtering** of sensitive parameters in request/response bodies, headers, and URLs
-- **Performance timing** - includes request processing time in all responses
-- **Large data truncation** - prevents log bloat from large payloads
-- **Multiple content types** - handles JSON, form data, and file uploads appropriately
+- **Automatic filtering** of sensitive parameters in headers and URLs
+- **Performance timing** - includes request processing time
+- **Form data compatibility** - doesn't interfere with OAuth2PasswordRequestForm
 
 ### Schema Organization
 
@@ -293,21 +307,6 @@ class NotAuthorized(APIException):
 # Automatically converts exceptions to JSON responses
 raise NotAuthorized("Invalid credentials")
 # Returns: {"message": "Invalid credentials", "status_code": 401, "timestamp": "..."}
-```
-
-### API Documentation
-
-**Comprehensive OpenAPI Documentation**:
-
-```python
-@router.post(
-    "/todos",
-    response_model=TodoResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses=ERROR_RESPONSES,  # Reusable error responses
-    summary="Create a new todo",
-    description="Create a new todo item for the authenticated user.",
-)
 ```
 
 ### Database Patterns
@@ -343,25 +342,25 @@ class Todos(Base):
 ### Authentication
 
 - `POST /auth/register` - User registration
-- `POST /auth/login` - User login (returns JWT token)
+- `POST /auth/login` - User login (OAuth2 password flow, returns JWT token)
 
 ### Todos
 
-- `GET /todos/` - Get user's todos
-- `POST /todos/` - Create new todo
-- `GET /todos/{id}` - Get specific todo
-- `PUT /todos/{id}` - Update todo
-- `DELETE /todos/{id}` - Delete todo
+- `GET /todos/` - Get user's todos (requires authentication)
+- `POST /todos/` - Create new todo (requires authentication)
+- `GET /todos/{id}` - Get specific todo (requires authentication)
+- `PUT /todos/{id}` - Update todo (requires authentication)
+- `DELETE /todos/{id}` - Delete todo (requires authentication)
 
 ### Users
 
-- `GET /users/me` - Get current user profile
-- `PUT /users/password` - Change password
+- `GET /users/me` - Get current user profile (requires authentication)
+- `PUT /users/password` - Change password (requires authentication)
 
 ### Admin
 
-- `GET /admin/todos` - Get all todos (admin only)
-- `DELETE /admin/todos/{id}` - Delete any todo (admin only)
+- `GET /admin/todos` - Get all todos (requires admin role)
+- `DELETE /admin/todos/{id}` - Delete any todo (requires admin role)
 
 ## 🧪 Code Quality
 
@@ -390,7 +389,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 # First-party imports (alphabetical)
-from config import db_dependency, settings
+from config import db_dependency, settings, CurrentUser, AdminUser
 from exceptions import NotAuthorized, RecordNotFound
 from schemas import TodoRequest, ValidId, ERROR_RESPONSES
 ```
@@ -445,24 +444,36 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ## 🎯 Best Practices Demonstrated
 
-1. **Single Responsibility Principle**: One class per file, focused responsibilities
-2. **Dependency Injection**: Clean separation of concerns
-3. **Configuration Management**: Environment-based settings
-4. **Error Handling**: Centralized exception management
-5. **API Documentation**: Comprehensive OpenAPI specs
-6. **Security**: JWT authentication with proper middleware
-7. **Database**: Proper ORM usage with migrations
-8. **Code Quality**: Linting, formatting, and import organization
-9. **Caching**: Request-level optimizations
-10. **RESTful Design**: Resource-based URLs and HTTP semantics
+1. **OAuth2 Integration**: Full Swagger UI authentication support
+2. **Dependency Injection**: Clean separation of concerns with FastAPI dependencies
+3. **Performance Optimization**: Single JWT decode per request
+4. **Type Safety**: Full type hints for authenticated users
+5. **Configuration Management**: Environment-based settings
+6. **Error Handling**: Centralized exception management with proper HTTP status codes
+7. **API Documentation**: Comprehensive OpenAPI specs with OAuth2 flow
+8. **Security**: JWT authentication with proper error chaining
+9. **Database**: Proper ORM usage with migrations
+10. **Code Quality**: Linting, formatting, and import organization
+11. **RESTful Design**: Resource-based URLs and HTTP semantics
+12. **Clean Architecture**: No redundant middleware, pure dependency injection
+
+## 🔐 Authentication Benefits
+
+- **Performance**: No duplicate JWT parsing or middleware overhead
+- **Simplicity**: No middleware state management or context variables
+- **Type Safety**: Full type hints for authenticated users in route handlers
+- **Swagger Integration**: Automatic OAuth2 password flow in documentation
+- **Testability**: Easy to mock authentication dependencies in tests
+- **Error Handling**: Proper HTTP exceptions with chained error context
 
 ## 🤝 Contributing
 
 1. Follow the established patterns and directory structure
-2. Add docstrings to all modules, classes, and functions
-3. Use type hints throughout
-4. Write comprehensive tests for new features
-5. Update documentation for any API changes
+2. Use dependency injection for authentication (no middleware)
+3. Add docstrings to all modules, classes, and functions
+4. Use type hints throughout
+5. Write comprehensive tests for new features
+6. Update documentation for any API changes
 
 ## 📝 License
 
@@ -470,4 +481,4 @@ This project serves as a template for FastAPI applications. Feel free to use it 
 
 ---
 
-**Built with ❤️ using FastAPI, SQLAlchemy, and modern Python practices.**
+**Built with ❤️ using FastAPI, OAuth2, SQLAlchemy, and modern Python practices.**
