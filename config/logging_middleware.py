@@ -104,18 +104,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                             body.decode()[:500] + "..." if len(body) > 500 else body.decode()
                         )
             elif "application/x-www-form-urlencoded" in content_type:
-                form_data = await request.form()
-                request_data["body"] = dict(form_data)
+                # Skip logging form data to avoid consuming the request stream
+                # Form data will be processed by FastAPI dependencies
+                request_data["body"] = "<FORM_DATA_SKIPPED_FOR_COMPATIBILITY>"
             elif "multipart/form-data" in content_type:
-                # Don't log file contents, just form fields
-                form_data = await request.form()
-                filtered_form = {}
-                for key, value in form_data.items():
-                    if hasattr(value, "filename"):  # File upload
-                        filtered_form[key] = f"<FILE: {value.filename}>"
-                    else:
-                        filtered_form[key] = value
-                request_data["body"] = filtered_form
+                # Skip logging multipart data to avoid consuming the request stream
+                # Multipart data will be processed by FastAPI dependencies
+                request_data["body"] = "<MULTIPART_DATA_SKIPPED_FOR_COMPATIBILITY>"
             else:
                 body = await request.body()
                 if body:

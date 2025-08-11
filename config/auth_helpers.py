@@ -1,131 +1,50 @@
-"""Authentication helpers - no request parameter needed!"""
+"""Authentication helpers - FastAPI dependencies for JWT authentication."""
 
-from functools import wraps
-from fastapi import Request
-from contextvars import ContextVar
-from typing import Optional
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from typing import Annotated
+from jose import jwt, JWTError
 
-from exceptions import NotAuthorized
 from models import User
 from .database import SessionLocal
+from .settings import settings
 
-# Context variable to store current request (for accessing user)
-_current_request: ContextVar[Request] = ContextVar("current_request")
-
-
-def set_current_request(request: Request):
-    """Store current request in context variable."""
-    _current_request.set(request)
+# OAuth2 security scheme for Swagger UI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
-def current_user() -> Optional[User]:
-    """
-    Helper to get the current authenticated user.
-    Returns cached User model object, fetching from DB only once per request.
-    Handles its own database dependency.
-    """
+def get_current_user_dependency(token: str = Depends(oauth2_scheme)) -> User:
+    """FastAPI dependency to get current authenticated user."""
     try:
-        request = _current_request.get()
-
-        # Check if user is already cached in request state
-        cached_user = getattr(request.state, "user", "__NOT_FETCHED__")
-        if cached_user != "__NOT_FETCHED__":
-            return cached_user  # Return cached user (could be None or actual User object)
-
-        # Get user_id from request state
-        user_id = getattr(request.state, "user_id", None)
+        # Decode JWT token directly (no middleware needed)
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        user_id = payload.get("id")
         if not user_id:
-            # Cache None to avoid repeated checks
-            request.state.user = None
-            return None
+            raise HTTPException(status_code=401, detail="Invalid token payload")
 
-        # Create our own database session for user lookup
-        db = SessionLocal()
-        try:
-            # Fetch user from database and cache it
-            user = db.query(User).filter(User.id == user_id).first()
-            request.state.user = user  # Cache for subsequent calls
-            return user
-        finally:
-            db.close()  # Always close the session
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Could not validate credentials") from exc
 
-    except LookupError:
-        return None
-
-
-def authenticate_user(func):
-    """Decorator equivalent to before_action :authenticate_user!"""
-
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        # Find request and set in context
-        request = None
-        for arg in args:
-            if isinstance(arg, Request):
-                request = arg
-                break
-
-        if request:
-            set_current_request(request)
-
-        # Check authentication - just verify user_id exists
-        try:
-            request = _current_request.get()
-            user_id = getattr(request.state, "user_id", None)
-            if not user_id:
-                raise NotAuthorized()
-        except LookupError:
-            raise NotAuthorized()
-
-        return await func(*args, **kwargs)
-
-    return wrapper
-
-
-def admin_required(func):
-    """Decorator equivalent to before_action :admin_required"""
-
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        # Find request and set in context
-        request = None
-        for arg in args:
-            if isinstance(arg, Request):
-                request = arg
-                break
-
-        if request:
-            set_current_request(request)
-
-            # Check admin authentication
-        user = current_user()
+    # Fetch user from database
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise NotAuthorized()
-
-        if user.role != "admin":
-            raise NotAuthorized("Admin access required")
-
-        return await func(*args, **kwargs)
-
-    return wrapper
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    finally:
+        db.close()
 
 
-def optional_auth(func):
-    """Decorator for optional authentication"""
+def get_admin_user_dependency(token: str = Depends(oauth2_scheme)) -> User:
+    """FastAPI dependency to get current authenticated admin user."""
+    user = get_current_user_dependency(token)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        # Find request and set in context
-        request = None
-        for arg in args:
-            if isinstance(arg, Request):
-                request = arg
-                break
 
-        if request:
-            set_current_request(request)
+# Type aliases for easier use in route handlers
+CurrentUser = Annotated[User, Depends(get_current_user_dependency)]
+AdminUser = Annotated[User, Depends(get_admin_user_dependency)]
 
-        # No authentication check - user may be None
-        return await func(*args, **kwargs)
-
-    return wrapper

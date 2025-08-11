@@ -47,12 +47,6 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def logging_config(self):
-        """Get the logging configuration instance."""
-        return logging_config
-
-    @computed_field
-    @property
     def database_url(self) -> str:
         """Generate database URL from YAML configuration."""
         db_config = load_database_config()

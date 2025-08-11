@@ -1,20 +1,26 @@
 """FastAPI TodoApp main application entry point."""
 
 from fastapi import FastAPI
+from fastapi.security import OAuth2PasswordBearer
 
-from config import setup_exception_handlers, AuthMiddleware, RequestLoggingMiddleware
+from config import setup_exception_handlers, RequestLoggingMiddleware
 from routers import auth, todos, admin, users
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(
+    title="FastAPI Todo App",
+    description="A comprehensive todo application with JWT authentication",
+    version="1.0.0",
+)
+
+# Configure OAuth2 security scheme for Swagger UI
+# This tells Swagger UI to use the /auth/login endpoint for authentication
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # Add request logging middleware (logs all requests/responses with filtering)
 app.add_middleware(RequestLoggingMiddleware)
-
-# Add authentication middleware (automatically injects user)
-app.add_middleware(AuthMiddleware)
 
 # Setup exception handlers
 setup_exception_handlers(app)

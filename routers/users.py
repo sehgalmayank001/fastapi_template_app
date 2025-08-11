@@ -4,8 +4,7 @@ from fastapi import APIRouter
 from passlib.context import CryptContext
 from starlette import status
 
-from config import db_dependency
-from config.auth_helpers import authenticate_user, current_user
+from config import db_dependency, CurrentUser
 from exceptions import NotAuthorized
 from models import User
 from schemas import UserVerification, UserResponse, ERROR_RESPONSES
@@ -22,10 +21,8 @@ bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     summary="Get current user profile",
     description="Retrieve the current authenticated user's profile information.",
 )
-@authenticate_user
-async def get_current_user_info(db: db_dependency):
+async def get_current_user_info(db: db_dependency, user: CurrentUser):
     """Get current user information."""
-    user = current_user()
     return db.query(User).filter(User.id == user.id).first()
 
 
@@ -36,13 +33,12 @@ async def get_current_user_info(db: db_dependency):
     summary="Change user password",
     description="Update the current user's password. Requires current password verification.",
 )
-@authenticate_user
 async def change_password(
     db: db_dependency,
     user_verification: UserVerification,
+    user: CurrentUser,
 ):
     """Change current user password."""
-    user = current_user()
     user_model = db.query(User).filter(User.id == user.id).first()
     if not bcrypt_context.verify(user_verification.password, user_model.hashed_password):
         raise NotAuthorized("Current password is incorrect")
