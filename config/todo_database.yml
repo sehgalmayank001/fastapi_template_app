@@ -1,0 +1,34 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: "{{ TODO_DB_POOL | default(5) }}"
+  timeout: "{{ TODO_DB_TIMEOUT | default(5000) }}"
+
+development:
+  <<: *default
+  # Use TODO_DATABASE_URL if provided, otherwise build from components
+  url: "{{ TODO_DATABASE_URL | default('') }}"
+  database: "{{ TODO_DB_NAME | default('todos_development') }}"
+  username: "{{ TODO_DB_USERNAME | default('') }}"
+  password: "{{ TODO_DB_PASSWORD | default('') }}"
+  host: "{{ TODO_DB_HOST | default('localhost') }}"
+  port: "{{ TODO_DB_PORT | default(5432) }}"
+
+test:
+  <<: *default
+  database: "{{ TODO_DB_NAME | default('todos_test') }}"
+  username: "{{ TODO_DB_USERNAME | default('') }}"
+  password: "{{ TODO_DB_PASSWORD | default('') }}"
+  host: "{{ TODO_DB_HOST | default('localhost') }}"
+  port: "{{ TODO_DB_PORT | default(5432) }}"
+
+production:
+  <<: *default
+  database: "{{ TODO_DB_NAME | default('todos_production') }}"
+  username: "{{ TODO_DB_USERNAME }}"
+  password: "{{ TODO_DB_PASSWORD }}"
+  host: "{{ TODO_DB_HOST | default('localhost') }}"
+  port: "{{ TODO_DB_PORT | default(5432) }}"
+  # Additional production settings
+  pool: "{{ TODO_DB_POOL | default(20) }}"
+  timeout: "{{ TODO_DB_TIMEOUT | default(10000) }}"

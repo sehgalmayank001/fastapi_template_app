@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter
 from starlette import status
 
-from config import db_dependency, CurrentUser
+from config import todo_db_dependency, CurrentUser
 from exceptions import RecordNotFound
 from models import Todo
 from schemas import TodoRequest, TodoResponse, ValidId, ERROR_RESPONSES
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/todos", tags=["todos"])
     status_code=status.HTTP_200_OK,
     responses=ERROR_RESPONSES,
 )
-async def get_todos(db: db_dependency, user: CurrentUser):
+async def get_todos(db: todo_db_dependency, user: CurrentUser):
     """Get all todos for the current user."""
     return db.query(Todo).filter(Todo.owner_id == user.id).all()
 
@@ -30,7 +30,7 @@ async def get_todos(db: db_dependency, user: CurrentUser):
     status_code=status.HTTP_200_OK,
     responses=ERROR_RESPONSES,
 )
-async def get_todo(db: db_dependency, todo_id: ValidId, user: CurrentUser):
+async def get_todo(db: todo_db_dependency, todo_id: ValidId, user: CurrentUser):
     """Get a specific todo by ID."""
     todo_model = db.query(Todo).filter(Todo.id == todo_id).filter(Todo.owner_id == user.id).first()
     if todo_model is not None:
@@ -44,7 +44,7 @@ async def get_todo(db: db_dependency, todo_id: ValidId, user: CurrentUser):
     status_code=status.HTTP_201_CREATED,
     responses=ERROR_RESPONSES,
 )
-async def create_todo(db: db_dependency, todo_request: TodoRequest, user: CurrentUser):
+async def create_todo(db: todo_db_dependency, todo_request: TodoRequest, user: CurrentUser):
     """Create a new todo."""
     todo_model = Todo(**todo_request.model_dump(), owner_id=user.id)
 
@@ -60,7 +60,7 @@ async def create_todo(db: db_dependency, todo_request: TodoRequest, user: Curren
     responses=ERROR_RESPONSES,
 )
 async def update_todo(
-    db: db_dependency,
+    db: todo_db_dependency,
     todo_request: TodoRequest,
     todo_id: ValidId,
     user: CurrentUser,
@@ -84,7 +84,7 @@ async def update_todo(
     status_code=status.HTTP_204_NO_CONTENT,
     responses=ERROR_RESPONSES,
 )
-async def delete_todo(db: db_dependency, todo_id: ValidId, user: CurrentUser):
+async def delete_todo(db: todo_db_dependency, todo_id: ValidId, user: CurrentUser):
     """Delete a todo."""
     todo_model = db.query(Todo).filter(Todo.id == todo_id).filter(Todo.owner_id == user.id).first()
     if todo_model is None:

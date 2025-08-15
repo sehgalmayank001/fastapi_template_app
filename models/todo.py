@@ -1,13 +1,13 @@
 """Todo model for TodoApp."""
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean
 
 from config import settings
 
-Base = settings.base
+TodoBase = settings.todo_base
 
 
-class Todo(Base):
+class Todo(TodoBase):
     """Todo model representing user tasks."""
 
     __tablename__ = "todos"
@@ -17,4 +17,4 @@ class Todo(Base):
     description = Column(String)
     priority = Column(Integer)
     complete = Column(Boolean, default=False)
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner_id = Column(Integer)  # No foreign key since users are in different DB

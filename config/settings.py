@@ -5,6 +5,13 @@ from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings
 
 from .database import load_database_config, get_database_url, engine, SessionLocal, Base
+from .todo_database import (
+    load_todo_database_config,
+    get_todo_database_url,
+    todo_engine,
+    TodoSessionLocal,
+    TodoBase,
+)
 
 
 class Settings(BaseSettings):
@@ -73,6 +80,43 @@ class Settings(BaseSettings):
     def base(self):
         """Get declarative base from database module."""
         return Base
+
+    # Todo database configuration
+    @computed_field
+    @property
+    def todo_database_url(self) -> str:
+        """Generate todo database URL from YAML configuration."""
+        todo_config = load_todo_database_config()
+        return get_todo_database_url(todo_config)
+
+    @computed_field
+    @property
+    def todo_database_pool_size(self) -> int:
+        """Get todo database pool size from YAML configuration."""
+        todo_config = load_todo_database_config()
+        return todo_config.get("pool", 5)
+
+    @computed_field
+    @property
+    def todo_database_timeout(self) -> int:
+        """Get todo database timeout from YAML configuration."""
+        todo_config = load_todo_database_config()
+        return todo_config.get("timeout", 5000)
+
+    @property
+    def todo_database_engine(self):
+        """Get todo database engine from todo_database module."""
+        return todo_engine
+
+    @property
+    def todo_session_local(self):
+        """Get todo session factory from todo_database module."""
+        return TodoSessionLocal
+
+    @property
+    def todo_base(self):
+        """Get todo declarative base from todo_database module."""
+        return TodoBase
 
 
 # Global settings instance - loaded once, used everywhere
